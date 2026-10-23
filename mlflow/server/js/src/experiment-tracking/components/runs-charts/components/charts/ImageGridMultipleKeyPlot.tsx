@@ -1,12 +1,17 @@
-import { useDesignSystemTheme, TableRow, TableHeader, TableCell, Table } from '@databricks/design-system';
+import { useDesignSystemTheme, TableRow, TableHeader, TableCell, Table, Tooltip } from '@databricks/design-system';
 import { useMemo, useRef, useState, useEffect } from 'react';
 import type { RunsChartsImageCardConfig, RunsChartsCardConfig } from '../../runs-charts.types';
 import type { RunsChartsRunData } from '../RunsCharts.common';
-import { EmptyImageGridPlot, ImagePlotWithHistory, ImageGridRunHeader } from './ImageGridPlot.common';
+import {
+  EmptyImageGridPlot,
+  ImagePlotWithHistory,
+  ImageGridRunHeader,
+  parseSpellsourceImageKey,
+} from './ImageGridPlot.common';
 import type { ImageEntity } from '@mlflow/mlflow/src/experiment-tracking/types';
 import { FormattedMessage } from 'react-intl';
 
-const LABEL_COLUMN_WIDTH = 160;
+const LABEL_COLUMN_WIDTH = 220;
 const MIN_CELL_SIZE = 150;
 
 export const ImageGridMultipleKeyPlot = ({
@@ -58,6 +63,11 @@ export const ImageGridMultipleKeyPlot = ({
   if (displayRuns.length === 0) {
     return <EmptyImageGridPlot />;
   }
+
+  const parsedKeys = cardConfig.imageKeys.map(parseSpellsourceImageKey);
+  const uniquePromptNames = Array.from(new Set(parsedKeys.map((k) => k.promptName)));
+  const isSinglePromptCard = uniquePromptNames.length === 1 && parsedKeys.some((k) => k.promptInfo !== null);
+
   return (
     <div css={{ height: '100%', width: '100%' }}>
       <div ref={measureRef} css={{ height: 0, overflow: 'hidden' }} />
@@ -68,7 +78,7 @@ export const ImageGridMultipleKeyPlot = ({
             css={{ minWidth: LABEL_COLUMN_WIDTH }}
           >
             <FormattedMessage
-              defaultMessage="images"
+              defaultMessage="Prompt / Stage"
               description="Experiment tracking > runs charts > charts > image grid multiple key > table header text"
             />
           </TableHeader>
@@ -83,17 +93,89 @@ export const ImageGridMultipleKeyPlot = ({
                   displayName={run.displayName}
                   color={run.color}
                   params={run.params}
+                  tags={run.tags}
                   maxParamsWidth={cellSize}
                 />
               </TableHeader>
             );
           })}
         </TableRow>
-        {cardConfig.imageKeys.map((imageKey) => {
+        {parsedKeys.map((parsed) => {
+          const { rawKey: imageKey, promptInfo, stageLabel, snappedStatus, isSnapped, canvasSize } = parsed;
+          const openFullPrompt = () => {
+            if (!promptInfo) return;
+            const blob = new Blob([`${promptInfo.title}\n${'='.repeat(promptInfo.title.length)}\n\nPrompt Key: ${parsed.promptName}\nCanvas Size: ${canvasSize || 'default'}\n\nFull Prompt:\n${promptInfo.fullText}\n`], {
+              type: 'text/plain;charset=utf-8',
+            });
+            const url = URL.createObjectURL(blob);
+            window.open(url, '_blank', 'noopener,noreferrer');
+          };
           return (
             <TableRow key={imageKey}>
               <TableCell css={{ minWidth: LABEL_COLUMN_WIDTH }}>
-                <div style={{ whiteSpace: 'normal' }}>{imageKey}</div>
+                {promptInfo ? (
+                  <div css={{ whiteSpace: 'normal', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div css={{ fontWeight: 600, fontSize: theme.typography.fontSizeMd, color: theme.colors.textPrimary }}>
+                      {isSinglePromptCard ? stageLabel : `${promptInfo.title}${canvasSize ? ` (${canvasSize})` : ''}`}
+                    </div>
+                    {!isSinglePromptCard && (
+                      <div css={{ fontSize: 11, fontWeight: 600, color: theme.colors.textSecondary }}>
+                        {stageLabel}
+                      </div>
+                    )}
+                    <div>
+                      <span
+                        css={{
+                          display: 'inline-block',
+                          padding: '1px 6px',
+                          borderRadius: 4,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          backgroundColor: isSnapped
+                            ? theme.colors.actionDefaultBackgroundPress
+                            : theme.colors.backgroundSecondary,
+                          color: theme.colors.textPrimary,
+                        }}
+                      >
+                        {snappedStatus}
+                      </span>
+                    </div>
+                    <div
+                      css={{
+                        fontSize: 11,
+                        lineHeight: 1.35,
+                        color: theme.colors.textSecondary,
+                      }}
+                    >
+                      {promptInfo.summary}
+                    </div>
+                    <div>
+                      <Tooltip
+                        content={promptInfo.fullText}
+                        componentId="mlflow.charts.image-plot.prompt-fulltext-tooltip"
+                      >
+                        <a
+                          href="#full-prompt"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            openFullPrompt();
+                          }}
+                          css={{
+                            fontSize: 11,
+                            fontWeight: 600,
+                            textDecoration: 'underline',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          View full prompt ↗
+                        </a>
+                      </Tooltip>
+                    </div>
+                    <div css={{ fontSize: 10, color: theme.colors.textSecondary, opacity: 0.75 }}>{imageKey}</div>
+                  </div>
+                ) : (
+                  <div style={{ whiteSpace: 'normal' }}>{imageKey}</div>
+                )}
               </TableCell>
               {displayRuns.map((run: RunsChartsRunData) => {
                 if (run.images[imageKey] && Object.keys(run.images[imageKey]).length > 0) {

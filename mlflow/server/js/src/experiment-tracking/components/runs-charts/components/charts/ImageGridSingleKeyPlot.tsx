@@ -64,7 +64,7 @@ export const ImageGridSingleKeyPlot = ({
               },
             }}
           >
-            <ImageGridRunHeader displayName={run.displayName} color={run.color} params={run.params} />
+            <ImageGridRunHeader displayName={run.displayName} color={run.color} params={run.params} tags={run.tags} />
             <ImagePlotWithHistory
               key={run.uuid}
               step={cardConfig.step}

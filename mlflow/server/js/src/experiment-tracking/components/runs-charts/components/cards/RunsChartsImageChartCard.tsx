@@ -5,6 +5,7 @@ import { type RunsChartCardReorderProps, RunsChartCardWrapper, RunsChartsChartsD
 import { useConfirmChartCardConfigurationFn } from '../../hooks/useRunsChartsUIConfiguration';
 import type { RunsChartsCardConfig, RunsChartsImageCardConfig } from '../../runs-charts.types';
 import { ImageGridPlot } from '../charts/ImageGridPlot';
+import { parseSpellsourceImageKey } from '../charts/ImageGridPlot.common';
 import { useDesignSystemTheme } from '@databricks/design-system';
 import { useImageSliderStepMarks } from '../../hooks/useImageSliderStepMarks';
 import {
@@ -15,7 +16,7 @@ import {
 import { LineSmoothSlider } from '@mlflow/mlflow/src/experiment-tracking/components/LineSmoothSlider';
 import type { RunsGroupByConfig } from '@mlflow/mlflow/src/experiment-tracking/components/experiment-page/utils/experimentPage.group-row-utils';
 
-const IMAGE_CHART_CARD_HEIGHT = 600;
+const IMAGE_CHART_CARD_HEIGHT = 760;
 
 export interface RunsChartsImageChartCardProps extends RunsChartCardReorderProps, RunsChartCardFullScreenProps {
   config: RunsChartsImageCardConfig;
@@ -62,13 +63,42 @@ export const RunsChartsImageChartCard = ({
     });
   }, []);
 
-  const chartName = config.imageKeys.length === 1 ? config.imageKeys[0] : DEFAULT_IMAGE_GRID_CHART_NAME;
+  const { chartName, chartSubtitle } = useMemo(() => {
+    const keys = config.imageKeys || [];
+    if (keys.length === 0) {
+      return { chartName: DEFAULT_IMAGE_GRID_CHART_NAME, chartSubtitle: null };
+    }
+    const parsed = keys.map(parseSpellsourceImageKey);
+    const uniquePrompts = Array.from(new Set(parsed.map((p) => p.promptName)));
+    if (uniquePrompts.length === 1 && parsed[0].promptInfo) {
+      const p0 = parsed[0];
+      const info = p0.promptInfo!;
+      const sizeStr = p0.canvasSize ? ` (${p0.canvasSize})` : '';
+      const stagesStr = parsed.map((p) => p.stageLabel.replace(/^\d+b?\.\s*/, '')).join(' → ');
+      return {
+        chartName: `${info.title}${sizeStr} — ${stagesStr}`,
+        chartSubtitle: `${info.summary} [${p0.promptName}]`,
+      };
+    }
+    const uniqueArms = Array.from(new Set(parsed.map((p) => p.arm)));
+    if (uniqueArms.length === 1 && parsed.some((p) => p.promptInfo)) {
+      const arm0 = parsed[0];
+      return {
+        chartName: `All Prompts Overview — ${arm0.stageLabel.replace(/^\d+b?\.\s*/, '')} (${arm0.snappedStatus})`,
+        chartSubtitle: `${keys.length} prompts across models`,
+      };
+    }
+    if (keys.length === 1) {
+      return { chartName: keys[0], chartSubtitle: null };
+    }
+    return { chartName: DEFAULT_IMAGE_GRID_CHART_NAME, chartSubtitle: null };
+  }, [config.imageKeys]);
 
   const toggleFullScreenChart = () => {
     setFullScreenChart?.({
       config,
       title: chartName,
-      subtitle: null,
+      subtitle: chartSubtitle,
     });
   };
 
@@ -169,7 +199,8 @@ export const RunsChartsImageChartCard = ({
       onDelete={onDelete}
       title={chartName}
       subtitle={
-        shouldDisplayImageLimitIndicator && `Displaying images from first ${NUM_RUNS_TO_SUPPORT_FOR_LOG_IMAGE} runs`
+        chartSubtitle ||
+        (shouldDisplayImageLimitIndicator && `Displaying images from first ${NUM_RUNS_TO_SUPPORT_FOR_LOG_IMAGE} runs`)
       }
       uuid={config.uuid}
       dragGroupKey={RunsChartsChartsDragGroup.GENERAL_AREA}
