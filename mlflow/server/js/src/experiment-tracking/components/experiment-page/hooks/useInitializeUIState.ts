@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
 import type { ExperimentPageUIState } from '../models/ExperimentPageUIState';
-import { EXPERIMENT_PAGE_UI_STATE_FIELDS, createExperimentPageUIState } from '../models/ExperimentPageUIState';
+import {
+  EXPERIMENT_PAGE_UI_STATE_FIELDS,
+  RUNS_VISIBILITY_MODE,
+  createExperimentPageUIState,
+} from '../models/ExperimentPageUIState';
 import { loadExperimentViewState } from '../utils/persistSearchFacets';
 import { keys, pick } from 'lodash';
 import type { ExperimentRunsSelectorResult } from '../utils/experimentRuns.selector';
@@ -86,6 +90,9 @@ export const useInitializeUIState = (
       const persistedViewState = loadExperimentViewState(persistKey);
       const persistedStateFound = Boolean(keys(persistedViewState || {}).length);
       const persistedUIState = persistedStateFound ? pick(persistedViewState, EXPERIMENT_PAGE_UI_STATE_FIELDS) : {};
+      if (persistedUIState['runsHiddenMode'] === RUNS_VISIBILITY_MODE.FIRST_10_RUNS) {
+        persistedUIState['runsHiddenMode'] = RUNS_VISIBILITY_MODE.SHOWALL;
+      }
       return {
         uiState: { ...baseState, ...persistedUIState },
         isSeeded: persistedStateFound,
@@ -146,6 +153,9 @@ export const useInitializeUIState = (
   useEffect(() => {
     const persistedViewState = loadExperimentViewState(persistKey);
     const persistedUIState = pick(persistedViewState, EXPERIMENT_PAGE_UI_STATE_FIELDS);
+    if (persistedUIState['runsHiddenMode'] === RUNS_VISIBILITY_MODE.FIRST_10_RUNS) {
+      persistedUIState['runsHiddenMode'] = RUNS_VISIBILITY_MODE.SHOWALL;
+    }
     const isSeeded = Boolean(keys(persistedViewState || {}).length);
     const isFirstVisit = !isSeeded;
 

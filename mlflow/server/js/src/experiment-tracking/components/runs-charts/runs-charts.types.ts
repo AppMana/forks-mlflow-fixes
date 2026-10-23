@@ -253,11 +253,69 @@ export abstract class RunsChartsCardConfig {
       });
     }
 
-    [...metricsToRender, ...imagesToRender].forEach((key) => {
+    const isSpellsourceImageKey = (k: string) => /\/(base|lora|lora_vae|snapped(\..+)?)$/.test(k);
+    const filterAndSortSpellsourceKeys = (keys: string[]) => {
+      const legacy = new Set([
+        'pepperoni-pizza',
+        'spaghetti-meatballs',
+        'soda-cup',
+        'fire-oven',
+        'alarm-clock',
+        'hot-dog',
+        'cook',
+      ]);
+      const armOrder = ['base', 'lora', 'lora_vae', 'snapped.measured-ppa-v1', 'snapped'];
+      const valid = keys.filter((k) => {
+        const idx = k.lastIndexOf('/');
+        if (idx < 0) return false;
+        const name = k.slice(0, idx);
+        const arm = k.slice(idx + 1);
+        if (legacy.has(name)) return false;
+        if (name.includes('__s') && !name.endsWith('__s0')) return false;
+        if (arm === 'snapped' && keys.includes(`${name}/snapped.measured-ppa-v1`)) return false;
+        return isSpellsourceImageKey(k);
+      });
+      return valid.sort((a, b) => {
+        const [na, aa] = [a.slice(0, a.lastIndexOf('/')), a.slice(a.lastIndexOf('/') + 1)];
+        const [nb, ab] = [b.slice(0, b.lastIndexOf('/')), b.slice(b.lastIndexOf('/') + 1)];
+        const parseName = (n: string) => {
+          const m = n.match(/^(.*?)(?:_(\d+))?(?:__s(\d+))?$/);
+          const stem = m ? m[1] : n;
+          const size = m && m[2] ? parseInt(m[2], 10) : 0;
+          const seed = m && m[3] ? parseInt(m[3], 10) : 0;
+          const kind = stem.startsWith('validation_') ? 0 : stem.startsWith('dinky_') ? 1 : 2;
+          return { seed, size, kind, stem, n };
+        };
+        const pa = parseName(na);
+        const pb = parseName(nb);
+        if (pa.seed !== pb.seed) return pa.seed - pb.seed;
+        if (pa.size !== pb.size) return pb.size - pa.size;
+        if (pa.kind !== pb.kind) return pa.kind - pb.kind;
+        if (pa.stem !== pb.stem) return pa.stem.localeCompare(pb.stem);
+        if (pa.n !== pb.n) return pa.n.localeCompare(pb.n);
+        const ia = armOrder.indexOf(aa) >= 0 ? armOrder.indexOf(aa) : 99;
+        const ib = armOrder.indexOf(ab) >= 0 ? armOrder.indexOf(ab) : 99;
+        return ia - ib || aa.localeCompare(ab);
+      });
+    };
+
+    const hasSpellsourceImages = imagesToRender.some(isSpellsourceImageKey);
+
+    [...metricsToRender, ...(hasSpellsourceImages ? [] : imagesToRender)].forEach((key) => {
       if (!sectionName2Uuid[RunsChartsCardConfig.extractChartSectionName(key)]) {
         sectionName2Uuid[RunsChartsCardConfig.extractChartSectionName(key)] = getUUID();
       }
     });
+
+    if (hasSpellsourceImages) {
+      const masterKeys = filterAndSortSpellsourceKeys(imagesToRender);
+      resultChartSet.push({
+        ...RunsChartsCardConfig.getEmptyChartCardByType(RunsChartType.IMAGE, false, 'gallery-master-grid', 'gallery-master'),
+        runsCountToCompare: 50,
+        imageKeys: masterKeys,
+        step: 0,
+      } as RunsChartsImageCardConfig);
+    }
 
     Array.from(metricsToRender)
       .sort()
@@ -278,18 +336,20 @@ export abstract class RunsChartsCardConfig {
         } as RunsChartsBarCardConfig);
       });
 
-    Array.from(imagesToRender)
-      .sort()
-      .forEach((imageKey) => {
-        const chartType = RunsChartType.IMAGE;
-        const sectionId = sectionName2Uuid[RunsChartsCardConfig.extractChartSectionName(imageKey)];
+    if (!hasSpellsourceImages) {
+      Array.from(imagesToRender)
+        .sort()
+        .forEach((imageKey) => {
+          const chartType = RunsChartType.IMAGE;
+          const sectionId = sectionName2Uuid[RunsChartsCardConfig.extractChartSectionName(imageKey)];
 
-        // Add an image chart
-        resultChartSet.push({
-          ...RunsChartsCardConfig.getEmptyChartCardByType(chartType, true, getUUID(), sectionId),
-          imageKeys: [imageKey],
-        } as RunsChartsImageCardConfig);
-      });
+          // Add an image chart
+          resultChartSet.push({
+            ...RunsChartsCardConfig.getEmptyChartCardByType(chartType, true, getUUID(), sectionId),
+            imageKeys: [imageKey],
+          } as RunsChartsImageCardConfig);
+        });
+    }
 
     // If no other charts exist, show empty parallel coordinates plot
     if (resultChartSet.length === 0 && useParallelCoordinatesChart) {
@@ -308,14 +368,25 @@ export abstract class RunsChartsCardConfig {
     ];
 
     // Create section configs
-    const resultSectionSet: ChartSectionConfig[] = sortedSectionNames.map((sectionName) => ({
-      uuid: sectionName2Uuid[sectionName],
-      name: sectionName,
-      display: true,
-      isReordered: false,
-      deleted: false,
-      isGenerated: true,
-    }));
+    const resultSectionSet: ChartSectionConfig[] = [
+      ...(hasSpellsourceImages
+        ? [
+            {
+              uuid: 'gallery-master',
+              name: 'Master Comparison Grid (Rows: Prompts • Columns: Models • Cells: 1. Epoch 0 untrained → 2. Latest checkpoint → 3. Latest → Snapped postprocessed)',
+              display: true,
+              isReordered: true,
+              columns: 1,
+            },
+          ]
+        : []),
+      ...sortedSectionNames.map((sectionName) => ({
+        uuid: sectionName2Uuid[sectionName],
+        name: sectionName,
+        display: true,
+        isReordered: false,
+      })),
+    ];
 
     return { resultChartSet, resultSectionSet };
   }
@@ -433,48 +504,146 @@ export abstract class RunsChartsCardConfig {
       });
     }
 
-    imagesToRender.forEach((imageKey) => {
-      const doesImageKeyExist =
-        resultChartSet.findIndex((chart) => {
-          const chartImageKeys = (chart as RunsChartsImageCardConfig).imageKeys;
-          return chartImageKeys ? chartImageKeys.includes(imageKey) : false;
-        }) >= 0;
+    const isSpellsourceImageKey = (k: string) => /\/(base|lora|lora_vae|snapped(\..+)?)$/.test(k);
+    const hasSpellsourceImages = imagesToRender.some(isSpellsourceImageKey);
 
-      const chartType = RunsChartType.IMAGE;
-      if (!doesImageKeyExist && !isAccordionReordered) {
-        // result is updated when there is a new image key
+    if (hasSpellsourceImages) {
+      const legacy = new Set([
+        'pepperoni-pizza',
+        'spaghetti-meatballs',
+        'soda-cup',
+        'fire-oven',
+        'alarm-clock',
+        'hot-dog',
+        'cook',
+      ]);
+      const armOrder = ['base', 'lora', 'lora_vae', 'snapped.measured-ppa-v1', 'snapped'];
+      const masterKeys = imagesToRender
+        .filter((k) => {
+          const idx = k.lastIndexOf('/');
+          if (idx < 0) return false;
+          const name = k.slice(0, idx);
+          const arm = k.slice(idx + 1);
+          if (legacy.has(name)) return false;
+          if (name.includes('__s') && !name.endsWith('__s0')) return false;
+          if (arm === 'snapped' && imagesToRender.includes(`${name}/snapped.measured-ppa-v1`)) return false;
+          return isSpellsourceImageKey(k);
+        })
+        .sort((a, b) => {
+          const [na, aa] = [a.slice(0, a.lastIndexOf('/')), a.slice(a.lastIndexOf('/') + 1)];
+          const [nb, ab] = [b.slice(0, b.lastIndexOf('/')), b.slice(b.lastIndexOf('/') + 1)];
+          const parseName = (n: string) => {
+            const m = n.match(/^(.*?)(?:_(\d+))?(?:__s(\d+))?$/);
+            const stem = m ? m[1] : n;
+            const size = m && m[2] ? parseInt(m[2], 10) : 0;
+            const seed = m && m[3] ? parseInt(m[3], 10) : 0;
+            const kind = stem.startsWith('validation_') ? 0 : stem.startsWith('dinky_') ? 1 : 2;
+            return { seed, size, kind, stem, n };
+          };
+          const pa = parseName(na);
+          const pb = parseName(nb);
+          if (pa.seed !== pb.seed) return pa.seed - pb.seed;
+          if (pa.size !== pb.size) return pb.size - pa.size;
+          if (pa.kind !== pb.kind) return pa.kind - pb.kind;
+          if (pa.stem !== pb.stem) return pa.stem.localeCompare(pb.stem);
+          if (pa.n !== pb.n) return pa.n.localeCompare(pb.n);
+          const ia = armOrder.indexOf(aa) >= 0 ? armOrder.indexOf(aa) : 99;
+          const ib = armOrder.indexOf(ab) >= 0 ? armOrder.indexOf(ab) : 99;
+          return ia - ib || aa.localeCompare(ab);
+        });
+
+      const masterSectionIndex = resultSectionSet.findIndex((s) => s.uuid === 'gallery-master');
+      if (masterSectionIndex < 0) {
         isResultUpdated = true;
+        resultSectionSet = [
+          {
+            uuid: 'gallery-master',
+            name: 'Master Comparison Grid (Rows: Prompts • Columns: Models • Cells: 1. Epoch 0 untrained → 2. Latest checkpoint → 3. Latest → Snapped postprocessed)',
+            display: true,
+            isReordered: true,
+            columns: 1,
+          },
+          ...resultSectionSet.filter(
+            (s) => s.uuid !== 'gallery-prompts' && s.uuid !== 'gallery-lora' && s.uuid !== 'gallery-stages',
+          ),
+        ];
+      }
 
-        // Insert a new UUID if section doesn't exist
-        const sectionName = RunsChartsCardConfig.extractChartSectionName(imageKey);
-        if (!sectionName2Uuid[sectionName]) {
-          sectionName2Uuid[sectionName] = getUUID();
+      const existingMasterIdx = resultChartSet.findIndex((c) => c.uuid === 'gallery-master-grid');
+      if (existingMasterIdx < 0) {
+        isResultUpdated = true;
+        for (let i = 0; i < resultChartSet.length; i++) {
+          if (resultChartSet[i].type === RunsChartType.IMAGE && !resultChartSet[i].deleted) {
+            resultChartSet[i] = { ...resultChartSet[i], deleted: true };
+          }
         }
-
-        // Get section for imageKey and check if it has been reordered
-        const sectionId = sectionName2Uuid[sectionName];
-        // If section is undefined, it may be a new section, so its not reordered
-        const section = resultSectionSet.find((section) => section.uuid === sectionId);
-        const isSectionReordered = section ? section.isReordered : false;
-
-        const newChartConfig = {
-          ...RunsChartsCardConfig.getEmptyChartCardByType(chartType, true, getUUID(), sectionId),
-          imageKeys: [imageKey],
-        } as RunsChartsImageCardConfig;
-
-        if (isSectionReordered) {
-          // If the section has been reordered, then append to the end of the section
-          resultChartSet.push(newChartConfig);
-        } else {
-          // If section has not been reordered, then insert alphabetically
-          const insertIndex = resultChartSet.findIndex((chart) => {
-            const chartImageKeys = (chart as RunsChartsImageCardConfig).imageKeys;
-            return chartImageKeys ? chartImageKeys[0]?.localeCompare(imageKey) >= 0 : false;
-          });
-          resultChartSet.splice(insertIndex, 0, newChartConfig);
+        resultChartSet.unshift({
+          ...RunsChartsCardConfig.getEmptyChartCardByType(
+            RunsChartType.IMAGE,
+            false,
+            'gallery-master-grid',
+            'gallery-master',
+          ),
+          runsCountToCompare: 50,
+          imageKeys: masterKeys,
+          step: 0,
+        } as RunsChartsImageCardConfig);
+      } else {
+        const currentMaster = resultChartSet[existingMasterIdx] as RunsChartsImageCardConfig;
+        const missingKeys = masterKeys.filter((k) => !currentMaster.imageKeys?.includes(k));
+        if (missingKeys.length > 0) {
+          isResultUpdated = true;
+          resultChartSet[existingMasterIdx] = {
+            ...currentMaster,
+            imageKeys: masterKeys,
+            runsCountToCompare: 50,
+          } as RunsChartsImageCardConfig;
         }
       }
-    });
+    } else {
+      imagesToRender.forEach((imageKey) => {
+        const doesImageKeyExist =
+          resultChartSet.findIndex((chart) => {
+            const chartImageKeys = (chart as RunsChartsImageCardConfig).imageKeys;
+            return chartImageKeys ? chartImageKeys.includes(imageKey) : false;
+          }) >= 0;
+
+        const chartType = RunsChartType.IMAGE;
+        if (!doesImageKeyExist && !isAccordionReordered) {
+          // result is updated when there is a new image key
+          isResultUpdated = true;
+
+          // Insert a new UUID if section doesn't exist
+          const sectionName = RunsChartsCardConfig.extractChartSectionName(imageKey);
+          if (!sectionName2Uuid[sectionName]) {
+            sectionName2Uuid[sectionName] = getUUID();
+          }
+
+          // Get section for imageKey and check if it has been reordered
+          const sectionId = sectionName2Uuid[sectionName];
+          // If section is undefined, it may be a new section, so its not reordered
+          const section = resultSectionSet.find((section) => section.uuid === sectionId);
+          const isSectionReordered = section ? section.isReordered : false;
+
+          const newChartConfig = {
+            ...RunsChartsCardConfig.getEmptyChartCardByType(chartType, true, getUUID(), sectionId),
+            imageKeys: [imageKey],
+          } as RunsChartsImageCardConfig;
+
+          if (isSectionReordered) {
+            // If the section has been reordered, then append to the end of the section
+            resultChartSet.push(newChartConfig);
+          } else {
+            // If section has not been reordered, then insert alphabetically
+            const insertIndex = resultChartSet.findIndex((chart) => {
+              const chartImageKeys = (chart as RunsChartsImageCardConfig).imageKeys;
+              return chartImageKeys ? chartImageKeys[0]?.localeCompare(imageKey) >= 0 : false;
+            });
+            resultChartSet.splice(insertIndex, 0, newChartConfig);
+          }
+        }
+      });
+    }
 
     // Append new charts at the end instead of alphabetically
     metricsToRender.forEach((metricKey) => {

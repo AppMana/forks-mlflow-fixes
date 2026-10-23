@@ -243,6 +243,8 @@ export const parseSpellsourceImageKey = (imageKey: string): ParsedImageKey => {
 export interface ParsedRunMetadata {
   modelTitle: string;
   epochsLabel: string;
+  shortEpochLabel: string;
+  evalKind: string | null;
   scaleLabel: string | null;
   resolutionLabel: string | null;
   kindLabel: string | null;
@@ -255,7 +257,7 @@ export const parseRunMetadata = (
 ): ParsedRunMetadata | null => {
   if (!tags) return null;
   const trial = tags['trial']?.value || displayName;
-  const evalKind = tags['eval_kind']?.value;
+  const evalKind = tags['eval_kind']?.value || null;
   const epoch = tags['epoch']?.value;
   const step = tags['step']?.value;
   const scaleTag = tags['scale']?.value;
@@ -274,20 +276,27 @@ export const parseRunMetadata = (
       : null;
 
   let epochsLabel = '';
+  let shortEpochLabel = '';
   if (evalKind === 'base' || epoch === '0' || step === '0') {
     epochsLabel = 'Epoch 0 (untrained, 0 steps)';
+    shortEpochLabel = 'Epoch 0';
   } else if (evalKind === 'progress') {
     epochsLabel = epoch ? `Epoch ${epoch} (ongoing, step ${step || '?'})` : `Ongoing (step ${step || '?'})`;
+    shortEpochLabel = epoch ? `Epoch ${epoch}` : `step ${step || '?'}`;
   } else if (evalKind === 'final') {
     if (epoch) {
       epochsLabel = `${epoch} epochs (step ${step || '?'})`;
+      shortEpochLabel = `${epoch} epochs`;
     } else if (trial.includes('stage2')) {
       epochsLabel = `Stage 2 (${step || '2000'} steps)`;
+      shortEpochLabel = 'Stage 2';
     } else {
       epochsLabel = `Finished (step ${step || '?'})`;
+      shortEpochLabel = step ? `step ${step}` : 'Latest';
     }
   } else if (epoch) {
     epochsLabel = `${epoch} epochs`;
+    shortEpochLabel = `${epoch} epochs`;
   }
 
   const kindLabel =
@@ -296,6 +305,8 @@ export const parseRunMetadata = (
   return {
     modelTitle: trial,
     epochsLabel,
+    shortEpochLabel: shortEpochLabel || 'Latest',
+    evalKind,
     scaleLabel,
     resolutionLabel,
     kindLabel,
@@ -469,8 +480,20 @@ export const ImagePlot = ({ imageUrl, compressedImageUrl, imageSize, maxImageSiz
               // short card rather than overflowing it.
               maxHeight: maxImageSize ?? '100%',
               backgroundColor: theme.colors.backgroundSecondary,
+              backgroundImage:
+                'linear-gradient(45deg, rgba(128,128,128,0.16) 25%, transparent 25%), ' +
+                'linear-gradient(-45deg, rgba(128,128,128,0.16) 25%, transparent 25%), ' +
+                'linear-gradient(45deg, transparent 75%, rgba(128,128,128,0.16) 75%), ' +
+                'linear-gradient(-45deg, transparent 75%, rgba(128,128,128,0.16) 75%)',
+              backgroundSize: '16px 16px',
+              backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0',
+              borderRadius: 4,
+              overflow: 'hidden',
               '.rc-image': {
                 cursor: 'pointer',
+              },
+              '.rc-image img': {
+                imageRendering: 'pixelated',
               },
             }}
           >
@@ -478,7 +501,11 @@ export const ImagePlot = ({ imageUrl, compressedImageUrl, imageSize, maxImageSiz
               <Image
                 src={compressedImageUrl}
                 preview={{ src: imageUrl }}
-                style={{ maxWidth: maxImageSize || '100%', maxHeight: maxImageSize || '100%' }}
+                style={{
+                  maxWidth: maxImageSize || imageSize || '100%',
+                  maxHeight: maxImageSize || imageSize || '100%',
+                  imageRendering: 'pixelated',
+                }}
               />
             </ImagePreviewGroup>
           </div>
@@ -500,8 +527,17 @@ export const ImagePlotWithHistory = ({
   runUuid: string;
 }) => {
   const { theme } = useDesignSystemTheme();
+  const availableSteps = Object.keys(metadataByStep)
+    .map(Number)
+    .filter((s) => !Number.isNaN(s));
+  const resolvedStep =
+    metadataByStep[step] !== undefined
+      ? step
+      : availableSteps.length > 0
+        ? Math.max(...availableSteps)
+        : undefined;
 
-  if (metadataByStep[step] === undefined) {
+  if (resolvedStep === undefined || metadataByStep[resolvedStep] === undefined) {
     return (
       <div
         css={{
@@ -526,8 +562,8 @@ export const ImagePlotWithHistory = ({
   }
   return (
     <ImagePlot
-      imageUrl={getArtifactLocationUrl(metadataByStep[step].filepath, runUuid)}
-      compressedImageUrl={getArtifactLocationUrl(metadataByStep[step].compressed_filepath, runUuid)}
+      imageUrl={getArtifactLocationUrl(metadataByStep[resolvedStep].filepath, runUuid)}
+      compressedImageUrl={getArtifactLocationUrl(metadataByStep[resolvedStep].compressed_filepath, runUuid)}
       imageSize={imageSize}
     />
   );

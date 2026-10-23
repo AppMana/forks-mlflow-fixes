@@ -63,10 +63,10 @@ export const RunsChartsImageChartCard = ({
     });
   }, []);
 
-  const { chartName, chartSubtitle } = useMemo(() => {
+  const { chartName, chartSubtitle, cardHeight } = useMemo(() => {
     const keys = config.imageKeys || [];
     if (keys.length === 0) {
-      return { chartName: DEFAULT_IMAGE_GRID_CHART_NAME, chartSubtitle: null };
+      return { chartName: DEFAULT_IMAGE_GRID_CHART_NAME, chartSubtitle: null, cardHeight: IMAGE_CHART_CARD_HEIGHT };
     }
     const parsed = keys.map(parseSpellsourceImageKey);
     const uniquePrompts = Array.from(new Set(parsed.map((p) => p.promptName)));
@@ -78,20 +78,30 @@ export const RunsChartsImageChartCard = ({
       return {
         chartName: `${info.title}${sizeStr} — ${stagesStr}`,
         chartSubtitle: `${info.summary} [${p0.promptName}]`,
+        cardHeight: 520,
       };
     }
     const uniqueArms = Array.from(new Set(parsed.map((p) => p.arm)));
+    if (uniquePrompts.length > 1 && uniqueArms.length > 1 && parsed.some((p) => p.promptInfo)) {
+      return {
+        chartName:
+          'Master Comparison Grid — Rows: Prompts • Columns: Models • Cells: 1. Epoch 0 (untrained) → 2. Latest checkpoint → 3. Latest → Snapped (postprocessed)',
+        chartSubtitle: `${uniquePrompts.length} prompts across models (sticky headers, click any image to zoom)`,
+        cardHeight: 1350,
+      };
+    }
     if (uniqueArms.length === 1 && parsed.some((p) => p.promptInfo)) {
       const arm0 = parsed[0];
       return {
         chartName: `All Prompts Overview — ${arm0.stageLabel.replace(/^\d+b?\.\s*/, '')} (${arm0.snappedStatus})`,
         chartSubtitle: `${keys.length} prompts across models`,
+        cardHeight: 1200,
       };
     }
     if (keys.length === 1) {
-      return { chartName: keys[0], chartSubtitle: null };
+      return { chartName: keys[0], chartSubtitle: null, cardHeight: IMAGE_CHART_CARD_HEIGHT };
     }
-    return { chartName: DEFAULT_IMAGE_GRID_CHART_NAME, chartSubtitle: null };
+    return { chartName: DEFAULT_IMAGE_GRID_CHART_NAME, chartSubtitle: null, cardHeight: IMAGE_CHART_CARD_HEIGHT };
   }, [config.imageKeys]);
 
   const toggleFullScreenChart = () => {
@@ -205,7 +215,7 @@ export const RunsChartsImageChartCard = ({
       uuid={config.uuid}
       dragGroupKey={RunsChartsChartsDragGroup.GENERAL_AREA}
       toggleFullScreenChart={toggleFullScreenChart}
-      height={IMAGE_CHART_CARD_HEIGHT}
+      height={cardHeight}
       {...reorderProps}
     >
       {cardBodyToRender}

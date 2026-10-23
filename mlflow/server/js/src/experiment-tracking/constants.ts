@@ -136,7 +136,7 @@ export const DEFAULT_IMAGE_GRID_CHART_NAME = 'Image grid';
 
 export const LOG_TABLE_IMAGE_COLUMN_TYPE = 'image';
 export const LOG_IMAGE_TAG_INDICATOR = 'mlflow.loggedImages';
-export const NUM_RUNS_TO_SUPPORT_FOR_LOG_IMAGE = 10;
+export const NUM_RUNS_TO_SUPPORT_FOR_LOG_IMAGE = 50;
 
 /**
  * This is a timestamp that is used as the base for relative time calculations.
