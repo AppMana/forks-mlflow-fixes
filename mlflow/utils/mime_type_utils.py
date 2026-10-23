@@ -32,6 +32,10 @@ def get_text_extensions():
         "tsv",
         "md",
         "rst",
+        "ipynb",
+        "jsonl",
+        "env",
+        ".env",
     ]
 
     if not IS_TRACING_SDK_ONLY:
@@ -45,11 +49,11 @@ def get_text_extensions():
 
 def _guess_mime_type(file_path):
     filename = pathlib.Path(file_path).name
-    extension = os.path.splitext(filename)[-1].replace(".", "")
+    extension = os.path.splitext(filename)[-1].replace(".", "").lower()
     # for MLmodel/mlproject with no extensions
     if extension == "":
         extension = filename
-    if extension in get_text_extensions():
+    if extension in get_text_extensions() or extension.lower() == ".env":
         return "text/plain"
     mime_type, _ = guess_type(filename)
     if not mime_type:
