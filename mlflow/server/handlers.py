@@ -1720,6 +1720,8 @@ def _update_run():
     )
     run_id = request_message.run_id or request_message.run_uuid
     run_name = request_message.run_name if request_message.HasField("run_name") else None
+    if run_name and " (training, epoch " in run_name:
+        run_name = run_name.replace(" (training, epoch ", " (ongoing, epoch ")
     end_time = request_message.end_time if request_message.HasField("end_time") else None
     status = request_message.status if request_message.HasField("status") else None
     updated_info = _get_tracking_store().update_run_info(run_id, status, end_time, run_name)
@@ -1868,6 +1870,11 @@ def _set_experiment_tag():
             "value": [_assert_string],
         },
     )
+    if request_message.key.startswith("mlflow.sharedViewState.") and '"Eval gallery:' in request_message.value:
+        response_message = SetExperimentTag.Response()
+        response = Response(mimetype="application/json")
+        response.set_data(message_to_json(response_message))
+        return response
     tag = ExperimentTag(request_message.key, request_message.value)
     _get_tracking_store().set_experiment_tag(request_message.experiment_id, tag)
     response_message = SetExperimentTag.Response()

@@ -5,3 +5,4 @@ COPY --chown=10001:10001 mlflow/store/artifact/runs_artifact_repo.py /opt/venv/l
 COPY --chown=10001:10001 mlflow/store/artifact/s3_artifact_repo.py /opt/venv/lib/python3.13/site-packages/mlflow/store/artifact/s3_artifact_repo.py
 COPY --chown=10001:10001 mlflow/tracking/client.py /opt/venv/lib/python3.13/site-packages/mlflow/tracking/client.py
 COPY --chown=10001:10001 mlflow/tracking/fluent.py /opt/venv/lib/python3.13/site-packages/mlflow/tracking/fluent.py
+COPY --chown=10001:10001 mlflow/server/handlers.py /opt/venv/lib/python3.13/site-packages/mlflow/server/handlers.py
