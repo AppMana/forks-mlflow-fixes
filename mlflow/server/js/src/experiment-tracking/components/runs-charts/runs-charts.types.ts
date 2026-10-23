@@ -437,11 +437,11 @@ export abstract class RunsChartsCardConfig {
       const doesImageKeyExist =
         resultChartSet.findIndex((chart) => {
           const chartImageKeys = (chart as RunsChartsImageCardConfig).imageKeys;
-          return chartImageKeys ? chartImageKeys.length === 1 && chartImageKeys.includes(imageKey) : false;
+          return chartImageKeys ? chartImageKeys.includes(imageKey) : false;
         }) >= 0;
 
       const chartType = RunsChartType.IMAGE;
-      if (!doesImageKeyExist) {
+      if (!doesImageKeyExist && !isAccordionReordered) {
         // result is updated when there is a new image key
         isResultUpdated = true;
 

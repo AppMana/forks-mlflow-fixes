@@ -11,7 +11,8 @@ import {
 } from '../models/ExperimentPageUIState';
 import type { ExperimentPageSearchFacetsState } from '../models/ExperimentPageSearchFacetsState';
 import { createExperimentPageSearchFacetsState } from '../models/ExperimentPageSearchFacetsState';
-import type { ExperimentEntity } from '../../../types';
+import type { ExperimentEntity, ExperimentViewRunsCompareMode } from '../../../types';
+import { EXPERIMENT_PAGE_VIEW_MODE_QUERY_PARAM_KEY } from './useExperimentPageViewMode';
 import type { KeyValueEntity } from '../../../../common/types';
 import type { ThunkDispatch } from '../../../../redux-types';
 import { useNavigate, useSearchParams } from '../../../../common/utils/RoutingUtils';
@@ -52,7 +53,9 @@ export const useSharedExperimentViewState = (
 
   const updateSearchFacets = useUpdateExperimentPageSearchFacets();
 
-  const [sharedSearchFacetsState, setSharedSearchFacetsState] = useState<ExperimentPageSearchFacetsState | null>(null);
+  const [sharedSearchFacetsState, setSharedSearchFacetsState] = useState<
+    (ExperimentPageSearchFacetsState & { compareRunsMode?: ExperimentViewRunsCompareMode }) | null
+  >(null);
   const [sharedUiState, setSharedUiState] = useState<ExperimentPageUIState | null>(null);
   const [sharedStateError, setSharedStateError] = useState<string | null>(null);
   const [sharedStateErrorMessage, setSharedStateErrorMessage] = useState<string | null>(null);
@@ -85,6 +88,7 @@ export const useSharedExperimentViewState = (
   // facet params. Prevents double-applying during the async parse and re-reporting an invalid key.
   // Cleared once facets are present (the apply landed) or the key leaves the URL.
   const appliedShareKeyRef = useRef<string | null>(null);
+  const lastAppliedShareKeyRef = useRef<string | null>(null);
 
   // Tracks the share key we've already refetched the experiment for, so a genuinely-missing key
   // errors instead of refetching forever. See the not-found branch below.
@@ -93,6 +97,7 @@ export const useSharedExperimentViewState = (
   useEffect(() => {
     if (!viewStateShareKey) {
       appliedShareKeyRef.current = null;
+      lastAppliedShareKeyRef.current = null;
       refetchedShareKeyRef.current = null;
       return;
     }
@@ -103,7 +108,7 @@ export const useSharedExperimentViewState = (
     // params were wiped while the key stayed (e.g. re-pasting the bare share link), which otherwise
     // leaves searchFacets null and hangs the page on the loading skeleton.
     const hasFacetParams = EXPERIMENT_PAGE_QUERY_PARAM_KEYS.some((key) => searchParams.has(key));
-    if (hasFacetParams) {
+    if (hasFacetParams && lastAppliedShareKeyRef.current === viewStateShareKey) {
       appliedShareKeyRef.current = null;
       // Deliberately NOT clearing refetchedShareKeyRef here: it's a once-ever-per-key latch (a stale
       // cache is refetched at most once), whereas appliedShareKeyRef is a per-apply guard that must
@@ -119,14 +124,6 @@ export const useSharedExperimentViewState = (
     }
 
     const applyParsedState = (parsedSharedViewState: unknown) => {
-      // Merge onto defaults so that fields intentionally omitted from a shared link
-      // (e.g. per-run pins/visibility) are restored to valid defaults rather than
-      // left undefined, which would break consumers that expect arrays/objects.
-      const sharedSearchFacetsState = {
-        ...createExperimentPageSearchFacetsState(),
-        ...pick(parsedSharedViewState, EXPERIMENT_PAGE_QUERY_PARAM_KEYS),
-      } as ExperimentPageSearchFacetsState;
-
       // Drop the non-shareable fields on read too (the writer already omits them): keeps the
       // filter symmetric so a hand-crafted link or a legacy tag can't smuggle per-run state
       // (e.g. runsHidden keyed by UUIDs that don't exist for the recipient) back into the view.
@@ -135,6 +132,26 @@ export const useSharedExperimentViewState = (
         ...omit(pick(parsedSharedViewState, EXPERIMENT_PAGE_UI_STATE_FIELDS), NON_SHAREABLE_UI_STATE_FIELDS),
       } as ExperimentPageUIState;
 
+      const explicitCompareRunsMode = (
+        parsedSharedViewState as { compareRunsMode?: ExperimentViewRunsCompareMode } | null
+      )?.compareRunsMode;
+      const inferredCompareRunsMode: ExperimentViewRunsCompareMode | undefined =
+        explicitCompareRunsMode ??
+        (Array.isArray(sharedUiState.compareRunCharts) &&
+        sharedUiState.compareRunCharts.some((chart) => chart && !chart.deleted && chart.type === 'IMAGE')
+          ? 'CHART'
+          : undefined);
+
+      // Merge onto defaults so that fields intentionally omitted from a shared link
+      // (e.g. per-run pins/visibility) are restored to valid defaults rather than
+      // left undefined, which would break consumers that expect arrays/objects.
+      const sharedSearchFacetsState = {
+        ...createExperimentPageSearchFacetsState(),
+        ...pick(parsedSharedViewState, EXPERIMENT_PAGE_QUERY_PARAM_KEYS),
+        ...(inferredCompareRunsMode ? { [EXPERIMENT_PAGE_VIEW_MODE_QUERY_PARAM_KEY]: inferredCompareRunsMode } : {}),
+      } as ExperimentPageSearchFacetsState & { compareRunsMode?: ExperimentViewRunsCompareMode };
+
+      lastAppliedShareKeyRef.current = viewStateShareKey;
       setSharedSearchFacetsState(sharedSearchFacetsState);
       setSharedUiState(sharedUiState);
       setSharedStateError(null);

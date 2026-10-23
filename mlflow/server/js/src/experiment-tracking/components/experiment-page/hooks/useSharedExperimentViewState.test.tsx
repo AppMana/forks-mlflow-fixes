@@ -609,6 +609,29 @@ describe('useSharedExperimentViewState', () => {
       rerender();
       await waitFor(() => expect(updateSearchFacetsMock).toHaveBeenCalledTimes(2));
     });
+
+    it('infers compareRunsMode=CHART when compareRunCharts contains a non-deleted IMAGE chart', async () => {
+      const stateWithImageChart = JSON.stringify({
+        ...testUIState,
+        ...testFacetsState,
+        compareRunCharts: [{ uuid: 'img-1', type: 'IMAGE', imageKeys: ['prompts/p1', 'prompts/p2'], deleted: false }],
+      });
+      const compressedState = await textCompressDeflate(stateWithImageChart);
+      const envelopeValue = encodeSavedViewEnvelope('Image gallery view', compressedState, 1770000000000);
+      const experiment = {
+        experimentId: 'experiment_1',
+        tags: [{ key: `mlflow.sharedViewState.${savedViewId}`, value: envelopeValue }],
+      } as ExperimentEntity;
+
+      renderHookWithIntl(() => useSharedExperimentViewState(uiStateSetterMock, experiment));
+
+      await waitFor(() => {
+        expect(updateSearchFacetsMock).toHaveBeenCalledWith(
+          expect.objectContaining({ compareRunsMode: 'CHART' }),
+          { replace: true },
+        );
+      });
+    });
   });
 
   test('should recognize uncompressed state also when compression flag is enabled', async () => {

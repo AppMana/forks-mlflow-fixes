@@ -38,7 +38,10 @@ type GetShareLinkModalProps = {
   uiState?: ExperimentPageUIState;
 };
 
-type ShareableViewState = ExperimentPageSearchFacetsState & ExperimentPageUIState;
+type ShareableViewState = ExperimentPageSearchFacetsState &
+  ExperimentPageUIState & {
+    compareRunsMode?: ExperimentViewRunsCompareMode;
+  };
 
 // Experiment-tag values are capped at MAX_EXPERIMENT_TAG_VAL_LENGTH (5000 chars) server-side
 // (mlflow/utils/validation.py); a write above the ceiling HARD-THROWS in the tracking store rather
@@ -164,13 +167,15 @@ export const ExperimentGetShareLinkModal = ({
     }
     // Read the current view at save time so changes made after the modal mounted
     // (e.g. resizing a column, then saving) are reflected.
-    const state =
-      liveState ??
-      ({
-        ...createExperimentPageSearchFacetsState(),
-        ...createExperimentPageUIState(),
-        ...loadExperimentViewState(persistKey),
-      } as ShareableViewState);
+    const state: ShareableViewState = {
+      ...(liveState ??
+        ({
+          ...createExperimentPageSearchFacetsState(),
+          ...createExperimentPageUIState(),
+          ...loadExperimentViewState(persistKey),
+        } as ShareableViewState)),
+      compareRunsMode: viewMode,
+    };
 
     setSaving(true);
     try {
