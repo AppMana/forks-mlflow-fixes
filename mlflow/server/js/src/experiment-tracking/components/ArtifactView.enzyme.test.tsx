@@ -147,6 +147,19 @@ describe('ArtifactView', () => {
     wrapper = shallowWithIntl(<ArtifactViewImpl {...minimalProps} />);
     expect(wrapper.length).toBe(1);
   });
+  test('shows a relative path when artifactRootUri is undefined', () => {
+    wrapper = getWrapper(minimalStore, {
+      ...minimalProps,
+      artifactRootUri: undefined,
+    });
+    const view = wrapper.find(ArtifactViewImpl).instance() as ArtifactViewImpl;
+    view.setState({ activeNodeId: 'file1' });
+    wrapper.update();
+
+    expect(view.getActiveNodeRealPath()).toBe('file1');
+    expect(wrapper.find('CopyButton').at(0).prop('copyText')).toBe('file1');
+    expect(wrapper.text()).not.toContain('undefined/file1');
+  });
   test('should render NoArtifactView when no artifacts are present', () => {
     // @ts-expect-error TS(2554): Expected 3 arguments, but got 2.
     const emptyNode = new ArtifactNode(true, undefined);
