@@ -53,7 +53,7 @@ const ChartPanel: React.FC<{ label: React.ReactNode; children: React.ReactElemen
 
 type DistributionTooltipRenderProps = {
   active?: boolean;
-  payload?: React.ComponentProps<typeof ScrollableTooltip>['payload'];
+  payload?: readonly any[];
   label?: string | number;
 };
 
@@ -146,7 +146,7 @@ export const TraceAssessmentChart: React.FC<TraceAssessmentChartProps> = ({
     ({ active, payload, label }: DistributionTooltipRenderProps) => (
       <ScrollableTooltip
         active={active}
-        payload={payload}
+        payload={payload as React.ComponentProps<typeof ScrollableTooltip>['payload']}
         label={String(label ?? '')}
         formatter={distributionTooltipFormatter}
         componentId="mlflow.overview.quality.assessment.view_traces_link"
