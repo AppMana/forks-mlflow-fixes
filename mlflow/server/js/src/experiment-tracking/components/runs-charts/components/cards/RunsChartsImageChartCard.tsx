@@ -42,6 +42,9 @@ export const RunsChartsImageChartCard = ({
   // Optimizations for smoother slider experience. Maintain a local copy of config, and update
   // the global state only after the user has finished dragging the slider.
   const [tmpConfig, setTmpConfig] = useState(config);
+  useEffect(() => {
+    setTmpConfig(config);
+  }, [config]);
   const confirmChartCardConfiguration = useConfirmChartCardConfigurationFn();
   const updateStep = useCallback(
     (newStep: number) => {

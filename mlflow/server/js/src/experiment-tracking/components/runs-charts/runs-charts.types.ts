@@ -590,8 +590,11 @@ export abstract class RunsChartsCardConfig {
         } as RunsChartsImageCardConfig);
       } else {
         const currentMaster = resultChartSet[existingMasterIdx] as RunsChartsImageCardConfig;
-        const missingKeys = masterKeys.filter((k) => !currentMaster.imageKeys?.includes(k));
-        if (missingKeys.length > 0) {
+        const currentKeys = currentMaster.imageKeys || [];
+        const keysChanged =
+          masterKeys.length > 0 &&
+          (currentKeys.length !== masterKeys.length || masterKeys.some((k, idx) => currentKeys[idx] !== k));
+        if (keysChanged) {
           isResultUpdated = true;
           resultChartSet[existingMasterIdx] = {
             ...currentMaster,

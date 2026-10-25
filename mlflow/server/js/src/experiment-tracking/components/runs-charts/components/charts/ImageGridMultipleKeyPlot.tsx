@@ -75,7 +75,27 @@ export const ImageGridMultipleKeyPlot = ({
     return Math.max(MIN_CELL_SIZE, Math.floor(availableWidth / displayRuns.length));
   }, [containerWidth, displayRuns.length, theme.spacing.md]);
 
-  const parsedKeys = useMemo(() => cardConfig.imageKeys.map(parseSpellsourceImageKey), [cardConfig.imageKeys]);
+  const effectiveImageKeys = useMemo(() => {
+    const keySet = new Set<string>(cardConfig.imageKeys || []);
+    for (const run of displayRuns) {
+      for (const k of Object.keys(run.images || {})) {
+        const pk = parseSpellsourceImageKey(k);
+        if (
+          pk.promptInfo !== null ||
+          pk.arm === 'base' ||
+          pk.arm === 'lora' ||
+          pk.arm === 'lora_vae' ||
+          pk.arm === 'snapped' ||
+          pk.arm.startsWith('snapped.')
+        ) {
+          keySet.add(k);
+        }
+      }
+    }
+    return Array.from(keySet);
+  }, [cardConfig.imageKeys, displayRuns]);
+
+  const parsedKeys = useMemo(() => effectiveImageKeys.map(parseSpellsourceImageKey), [effectiveImageKeys]);
 
   const isSpellsourceGrid = useMemo(
     () =>
@@ -112,8 +132,22 @@ export const ImageGridMultipleKeyPlot = ({
     for (const grp of map.values()) {
       grp.orderedItems.sort((a, b) => a.stageNumber - b.stageNumber || a.arm.localeCompare(b.arm));
     }
-    return Array.from(map.values());
-  }, [parsedKeys]);
+    const allGroups = Array.from(map.values());
+    if (!isSpellsourceGrid || displayRuns.length === 0) {
+      return allGroups;
+    }
+    // Filter out prompt rows where 0 out of displayRuns have any logged images
+    // (e.g. hiding 1024x1024 rows when viewing 512x512-only edit models)
+    const nonEmptyGroups = allGroups.filter((grp) =>
+      displayRuns.some((run) =>
+        grp.orderedItems.some((item) => {
+          const meta = run.images?.[item.rawKey];
+          return meta && Object.keys(meta).length > 0;
+        }),
+      ),
+    );
+    return nonEmptyGroups.length > 0 ? nonEmptyGroups : allGroups;
+  }, [parsedKeys, isSpellsourceGrid, displayRuns]);
 
   const filteredPromptGroups = useMemo(() => {
     return promptGroups.filter((g) => {

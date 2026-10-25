@@ -531,7 +531,7 @@ export const ImagePlotWithHistory = ({
     .map(Number)
     .filter((s) => !Number.isNaN(s));
   const resolvedStep =
-    metadataByStep[step] !== undefined
+    step > 0 && metadataByStep[step] !== undefined
       ? step
       : availableSteps.length > 0
         ? Math.max(...availableSteps)
