@@ -386,6 +386,17 @@ def test_log_metrics_uses_millisecond_timestamp_resolution_client():
     assert {(m.value, m.timestamp) for m in metric_history_name2} == {(-3, 123 * 1000)}
 
 
+def test_log_metric_and_log_metrics_preserve_zero_timestamp():
+    with start_run() as active_run:
+        run_id = active_run.info.run_id
+        mlflow.log_metric("single", 1, timestamp=0)
+        mlflow.log_metrics({"batch": 2}, timestamp=0)
+
+    client = tracking.MlflowClient()
+    assert [m.timestamp for m in client.get_metric_history(run_id, "single")] == [0]
+    assert [m.timestamp for m in client.get_metric_history(run_id, "batch")] == [0]
+
+
 @pytest.mark.parametrize("step_kwarg", [None, -10, 5])
 def test_log_metrics_uses_common_timestamp_and_step_per_invocation(step_kwarg):
     expected_metrics = {"name_1": 30, "name_2": -3, "nested/nested/name": 40}
@@ -1258,6 +1269,34 @@ def test_log_table_with_datetime_columns(file_type):
     "MLFLOW_SKINNY" in os.environ,
     reason="Skinny client does not support the np or pandas dependencies",
 )
+def test_log_table_append_preserves_existing_json_values():
+    start_time = str(datetime.now(timezone.utc))
+    artifact_file = "results.json"
+    batches = [
+        {"zip_code": ["02108"], "id": ["12345678901234567890"], "start_time": [start_time]},
+        {"zip_code": ["10001"], "id": ["12345678901234567891"], "start_time": [start_time]},
+        {"zip_code": ["00501"], "id": ["12345678901234567892"], "start_time": [start_time]},
+    ]
+    with mlflow.start_run() as run:
+        for batch in batches:
+            mlflow.log_table(data=batch, artifact_file=artifact_file)
+
+    artifact_path = mlflow.artifacts.download_artifacts(
+        run_id=run.info.run_id, artifact_path=artifact_file
+    )
+    with open(artifact_path) as f:
+        saved = json.load(f)
+    assert saved["data"] == [
+        ["02108", "12345678901234567890", start_time],
+        ["10001", "12345678901234567891", start_time],
+        ["00501", "12345678901234567892", start_time],
+    ]
+
+
+@pytest.mark.skipif(
+    "MLFLOW_SKINNY" in os.environ,
+    reason="Skinny client does not support the np or pandas dependencies",
+)
 @pytest.mark.parametrize("file_type", ["json", "parquet"])
 def test_log_table_with_image_columns(file_type):
     import numpy as np
@@ -1330,6 +1369,41 @@ def test_log_table_with_pil_image_columns(file_type):
     artifact_path = mlflow.artifacts.download_artifacts(run_id=run_id, artifact_path=artifact_file)
     df = read_data(artifact_path)
     assert df["image"][2]["type"] == "image"
+
+
+@pytest.mark.skipif(
+    "MLFLOW_SKINNY" in os.environ,
+    reason="Skinny client does not support the np or pandas dependencies",
+)
+@pytest.mark.parametrize("file_type", ["json", "parquet"])
+@pytest.mark.parametrize("image_type", ["mlflow", "pil"])
+def test_log_table_with_image_dataframe_reused_across_runs(file_type, image_type):
+    import numpy as np
+    import pandas as pd
+    from PIL import Image
+
+    pixels = np.array([[[255, 0, 0], [0, 255, 0]]], dtype=np.uint8)
+    image = mlflow.Image(pixels) if image_type == "mlflow" else Image.fromarray(pixels)
+    data = pd.DataFrame({"inputs": ["prompt"], "image": [image]})
+    original_data = data.copy()
+    artifact_file = f"images.{file_type}"
+    client = MlflowClient()
+
+    for _ in range(2):
+        with mlflow.start_run() as run:
+            client.log_table(run.info.run_id, data, artifact_file)
+            artifact_path = client.download_artifacts(run.info.run_id, artifact_file)
+            logged_image = read_data(artifact_path)["image"][0]
+            assert logged_image["type"] == "image"
+            for key in ("filepath", "compressed_filepath"):
+                image_path = client.download_artifacts(run.info.run_id, logged_image[key])
+                with Image.open(image_path) as logged:
+                    logged.load()
+                    if key == "filepath":
+                        np.testing.assert_array_equal(np.array(logged), pixels)
+
+    pd.testing.assert_frame_equal(data, original_data)
+    assert data["image"][0] is image
 
 
 @pytest.mark.skipif(
