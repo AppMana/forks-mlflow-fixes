@@ -14,6 +14,7 @@ const TABS_WITHOUT_MARGIN = [RunPageTabName.ARTIFACTS, RunPageTabName.EVALUATION
 // Default tabs to show in the run view
 const DEFAULT_VISIBLE_TABS = [
   RunPageTabName.OVERVIEW,
+  RunPageTabName.DATASETS,
   RunPageTabName.MODEL_METRIC_CHARTS,
   RunPageTabName.SYSTEM_METRIC_CHARTS,
   RunPageTabName.EVALUATIONS,
@@ -24,6 +25,9 @@ const DEFAULT_VISIBLE_TABS = [
 const TAB_LABELS: Record<RunPageTabName, ReactNode> = {
   [RunPageTabName.OVERVIEW]: (
     <FormattedMessage defaultMessage="Overview" description="Run details page > tab selector > overview tab" />
+  ),
+  [RunPageTabName.DATASETS]: (
+    <FormattedMessage defaultMessage="Datasets" description="Run details page > tab selector > datasets tab" />
   ),
   [RunPageTabName.MODEL_METRIC_CHARTS]: (
     <FormattedMessage

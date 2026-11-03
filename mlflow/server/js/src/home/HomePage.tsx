@@ -176,7 +176,43 @@ const HomePage = () => {
               Progress) and active Family Training Experiments
             </div>
           </div>
-          <div css={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div css={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <a
+              href="#/experiments/124/datasets"
+              css={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '7px 14px',
+                borderRadius: 6,
+                fontSize: 13,
+                fontWeight: 700,
+                backgroundColor: '#4f46e5',
+                color: '#ffffff',
+                textDecoration: 'none',
+                '&:hover': { filter: 'brightness(1.06)' },
+              }}
+            >
+              Unified Pixel Art Dataset (5,444 rows: Artists + Console Games) ↗
+            </a>
+            <a
+              href="#/experiments/158/datasets"
+              css={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '7px 14px',
+                borderRadius: 6,
+                fontSize: 13,
+                fontWeight: 700,
+                backgroundColor: '#0d9488',
+                color: '#ffffff',
+                textDecoration: 'none',
+                '&:hover': { filter: 'brightness(1.06)' },
+              }}
+            >
+              Multi-Console Games Dataset (667 items, 8 Consoles) ↗
+            </a>
             <a
               href="#/experiments/115?viewStateShareKey=final-eval-gallery&compareRunsMode=CHART"
               css={{

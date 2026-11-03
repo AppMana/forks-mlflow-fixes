@@ -8,6 +8,9 @@ import { RunPageTabName } from '../../constants';
  */
 export const useRunViewActiveTab = (): RunPageTabName => {
   const { '*': tabParam } = useParams<{ '*': string }>();
+  if (tabParam === 'datasets' || tabParam?.startsWith('datasets/')) {
+    return RunPageTabName.DATASETS;
+  }
   if (tabParam === 'model-metrics') {
     return RunPageTabName.MODEL_METRIC_CHARTS;
   }

@@ -165,6 +165,17 @@ const ExperimentPageSideNavCustomModelConfig = {
     {
       label: (
         <FormattedMessage
+          defaultMessage="Datasets"
+          description="Label for the datasets tab in the MLflow experiment navbar"
+        />
+      ),
+      icon: <DatabaseIcon />,
+      tabName: ExperimentPageTabName.Datasets,
+      componentId: 'mlflow.experiment-side-nav.classic-ml.datasets',
+    },
+    {
+      label: (
+        <FormattedMessage
           defaultMessage="Models"
           description="Label for the Models tab in the MLflow experiment navbar"
         />

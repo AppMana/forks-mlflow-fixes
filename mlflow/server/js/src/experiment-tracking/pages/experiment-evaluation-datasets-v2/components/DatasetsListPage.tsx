@@ -9,6 +9,7 @@ import { DatasetsListEmptyState, DatasetsListNoResultsEmptyState } from './Datas
 import { DatasetsListPageSkeleton } from './DatasetsListPageSkeleton';
 import { DatasetsListTable } from './DatasetsListTable';
 import { DatasetsListToolbar } from './DatasetsListToolbar';
+import { ExperimentRunDatasetsSection } from './ExperimentRunDatasetsSection';
 import { useDatasetsPageQuery } from '../hooks/useDatasetsPageQuery';
 import { useDatasetNotifications } from '../hooks/useDatasetNotifications';
 import { useDatasetDelete } from '../hooks/useDatasetDelete';
@@ -161,17 +162,25 @@ export const DatasetsListPage = ({ experimentId }: DatasetsListPageProps) => {
     [navigate, experimentId, notify, intl, resetPagination],
   );
 
+  const [hasRunDatasets, setHasRunDatasets] = useState(false);
+  const [isRunDatasetsLoading, setIsRunDatasetsLoading] = useState(true);
+  const handleHasRunDatasetsChange = useCallback((hasDs: boolean, loadingDs: boolean) => {
+    setHasRunDatasets(hasDs);
+    setIsRunDatasetsLoading(loadingDs);
+  }, []);
+
   const hasActiveSearch = searchValue.trim().length > 0;
   const hasError = error instanceof Error;
   // `keepPreviousData: true` on the underlying query means `isLoading` is true only
   // before any data has resolved for any query key — the right signal for "we don't yet
   // know whether this workspace has datasets". Refetches after that point flip
   // `isFetching` instead, so the skeleton won't reappear during search or pagination.
-  const isInitialLoad = isLoading;
+  const isInitialLoad = isLoading && isRunDatasetsLoading;
   // CTA-only state: confirmed-empty workspace with no active search and no fetch error.
   // The CTA has its own Create-dataset button so we hide the toolbar entirely here —
   // otherwise the Create button shows twice and the disabled search bar adds noise.
-  const showCtaOnly = !isInitialLoad && !hasError && datasets.length === 0 && !hasActiveSearch;
+  const showCtaOnly =
+    !isInitialLoad && !hasError && datasets.length === 0 && !hasRunDatasets && !isRunDatasetsLoading && !hasActiveSearch;
   // Inside the toolbar branch, swap the table for a no-results panel when a search
   // narrowed the list to empty. Toolbar stays visible so the user can clear the search.
   // Suppress while a user-initiated query change is in flight — the table renders skeleton
@@ -186,6 +195,7 @@ export const DatasetsListPage = ({ experimentId }: DatasetsListPageProps) => {
         flexDirection: 'column',
         flex: 1,
         minHeight: 0,
+        overflowY: 'auto',
         // Outer wrappers (PageWrapper + ExperimentPageTabs) already contribute spacing
         // on the right (24px) and bottom (8px); only top and left need padding here.
         paddingTop: revampEnabled ? 0 : theme.spacing.md,
@@ -193,11 +203,16 @@ export const DatasetsListPage = ({ experimentId }: DatasetsListPageProps) => {
         gap: theme.spacing.md,
       }}
     >
+      <ExperimentRunDatasetsSection
+        experimentId={experimentId}
+        onHasRunDatasetsChange={handleHasRunDatasetsChange}
+      />
+
       {isInitialLoad ? (
         <DatasetsListPageSkeleton />
       ) : showCtaOnly ? (
         <DatasetsListEmptyState experimentId={experimentId} onDatasetCreated={handleDatasetCreated} refetch={refetch} />
-      ) : (
+      ) : datasets.length > 0 || hasActiveSearch || hasError ? (
         <>
           <DatasetsListToolbar
             experimentId={experimentId}
@@ -224,15 +239,10 @@ export const DatasetsListPage = ({ experimentId }: DatasetsListPageProps) => {
           {showNoResultsPanel ? (
             <DatasetsListNoResultsEmptyState searchQuery={searchValue} onClearSearch={handleClearSearch} />
           ) : (
-            // Scroll the table region so pagination stays reachable when the rows exceed the
-            // viewport. Without this wrapper, the table grows past the outer PageWrapper's
-            // `overflow: hidden` boundary and the pagination footer gets clipped.
             <div css={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
               <DatasetsListTable
                 experimentId={experimentId}
                 datasets={datasets}
-                // Disable both pagination buttons while a pagination/search fetch is in
-                // flight so the user can't queue up clicks against stale data.
                 hasNextPage={hasNextPage && !isLoadingRows}
                 hasPreviousPage={hasPreviousPage && !isLoadingRows}
                 onNextPage={handleNextPage}
@@ -244,7 +254,7 @@ export const DatasetsListPage = ({ experimentId }: DatasetsListPageProps) => {
             </div>
           )}
         </>
-      )}
+      ) : null}
 
       <DangerModal
         componentId="mlflow.eval-datasets-v2.list.delete-confirm-modal"

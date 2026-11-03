@@ -16,6 +16,7 @@ import Utils from '../../../common/utils/Utils';
 import { RunPageTabName } from '../../constants';
 import { RenameRunModal } from '../modals/RenameRunModal';
 import { RunViewArtifactTab } from './RunViewArtifactTab';
+import { RunViewDatasetsTab } from './RunViewDatasetsTab';
 import { RunViewHeader, type RunViewHeaderProps } from './RunViewHeader';
 import { RunViewOverview } from './RunViewOverview';
 import { useRunDetailsPageData } from './hooks/useRunDetailsPageData';
@@ -168,6 +169,17 @@ export const RunPage = (props: RunPageProps) => {
       />
     );
     switch (activeTab) {
+      case RunPageTabName.DATASETS:
+        return (
+          <RunViewDatasetsTab
+            runUuid={safeRunUuid}
+            experimentId={safeExperimentId}
+            runInfo={runInfo}
+            tags={tags}
+            datasets={datasets}
+            artifactUri={runInfo.artifactUri ?? undefined}
+          />
+        );
       case RunPageTabName.MODEL_METRIC_CHARTS:
         return (
           <RunViewMetricCharts

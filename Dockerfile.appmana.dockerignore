@@ -1,0 +1,8 @@
+*
+!mlflow/**
+mlflow/server/js/**
+!mlflow/server/js/build/**
+mlflow/java/**
+mlflow/R/**
+**/__pycache__/**
+**/*.pyc
