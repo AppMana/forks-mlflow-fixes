@@ -504,7 +504,8 @@ export abstract class RunsChartsCardConfig {
       });
     }
 
-    const isSpellsourceImageKey = (k: string) => /\/(base|lora|lora_vae|snapped(\..+)?)$/.test(k);
+    const isSpellsourceImageKey = (k: string) =>
+      /\/(base|lora|lora_vae|snapped(\..+)?|ref_t2i\.[^.]+)$/.test(k);
     const hasSpellsourceImages = imagesToRender.some(isSpellsourceImageKey);
 
     if (hasSpellsourceImages) {
@@ -517,7 +518,15 @@ export abstract class RunsChartsCardConfig {
         'hot-dog',
         'cook',
       ]);
-      const armOrder = ['base', 'lora', 'lora_vae', 'snapped.measured-ppa-v1', 'snapped'];
+      const armOrder = [
+        'base',
+        'lora',
+        'lora_vae',
+        'snapped.measured-ppa-v3',
+        'snapped.measured-ppa-v2',
+        'snapped.measured-ppa-v1',
+        'snapped',
+      ];
       const masterKeys = imagesToRender
         .filter((k) => {
           const idx = k.lastIndexOf('/');
@@ -526,7 +535,12 @@ export abstract class RunsChartsCardConfig {
           const arm = k.slice(idx + 1);
           if (legacy.has(name)) return false;
           if (name.includes('__s') && !name.endsWith('__s0')) return false;
-          if (arm === 'snapped' && imagesToRender.includes(`${name}/snapped.measured-ppa-v1`)) return false;
+          if (
+            (arm === 'snapped' || arm === 'snapped.measured-ppa-v1' || arm === 'snapped.measured-ppa-v2') &&
+            imagesToRender.includes(`${name}/snapped.measured-ppa-v3`)
+          ) {
+            return false;
+          }
           return isSpellsourceImageKey(k);
         })
         .sort((a, b) => {

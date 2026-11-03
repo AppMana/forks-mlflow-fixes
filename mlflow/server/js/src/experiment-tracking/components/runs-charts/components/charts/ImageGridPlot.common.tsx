@@ -8,6 +8,7 @@ import { useState, useEffect } from 'react';
 import { Typography } from '@databricks/design-system';
 import { ImagePreviewGroup, Image } from '../../../../../shared/building_blocks/Image';
 import { RunColorPill } from '@mlflow/mlflow/src/experiment-tracking/components/experiment-page/components/RunColorPill';
+import { StageJudgementBadgeControl } from './StageJudgementModal';
 
 export const MIN_GRID_IMAGE_SIZE = 400;
 
@@ -223,6 +224,11 @@ export const parseSpellsourceImageKey = (imageKey: string): ParsedImageKey => {
     stageLabel = '3. Latest → Snapped (postprocessed)';
     snappedStatus = `Snapped (${method} + border background removed)`;
     isSnapped = true;
+  } else if (arm.startsWith('ref_t2i.')) {
+    stageNumber = 4;
+    const gen = arm.slice('ref_t2i.'.length);
+    stageLabel = `4. T2I→Edit (${gen})`;
+    snappedStatus = `Unsnapped (${gen} T2I reference → edit model)`;
   }
 
   return {
@@ -244,6 +250,14 @@ export interface ParsedRunMetadata {
   modelTitle: string;
   epochsLabel: string;
   shortEpochLabel: string;
+  evalBadgeLabel: string;
+  trainBadgeLabel: string | null;
+  trainStatus: 'live' | 'done' | 'stopped' | 'base' | null;
+  trainRunHref: string | null;
+  trainExpHref: string | null;
+  trainExpLabel: string | null;
+  conditioningLabel: string | null;
+  defaultVisible: boolean;
   evalKind: string | null;
   scaleLabel: string | null;
   resolutionLabel: string | null;
@@ -256,10 +270,17 @@ export const parseRunMetadata = (
   tags?: Record<string, KeyValueEntity>,
 ): ParsedRunMetadata | null => {
   if (!tags) return null;
-  const trial = tags['trial']?.value || displayName;
+  const rawTrial = tags['trial']?.value || displayName.replace(/\s*\((?:ongoing|training),\s*epoch\s*[^)]+\)\s*$/i, '');
+  const trial = rawTrial;
   const evalKind = tags['eval_kind']?.value || null;
-  const epoch = tags['epoch']?.value;
-  const step = tags['step']?.value;
+  const evalEpoch = tags['eval_epoch']?.value || tags['epoch']?.value;
+  const evalStep = tags['eval_step']?.value || tags['step']?.value;
+  const trainEpoch = tags['train_epoch']?.value;
+  const trainTotalEpochs = tags['train_total_epochs']?.value;
+  const trainStatusRaw = tags['train_status']?.value as 'live' | 'done' | 'stopped' | 'base' | undefined;
+  const trialRunId = tags['trial_run_id']?.value;
+  const trialExpId = tags['trial_experiment_id']?.value;
+  const trialExpName = tags['trial_experiment_name']?.value;
   const scaleTag = tags['scale']?.value;
   const kindTag = tags['kind']?.value;
 
@@ -275,42 +296,101 @@ export const parseRunMetadata = (
       ? 'c1024 (eval)'
       : null;
 
-  let epochsLabel = '';
+  let evalBadgeLabel = '';
   let shortEpochLabel = '';
-  if (evalKind === 'base' || epoch === '0' || step === '0') {
-    epochsLabel = 'Epoch 0 (untrained, 0 steps)';
+  if (evalKind === 'base' || evalEpoch === '0' || evalStep === '0') {
+    evalBadgeLabel = 'Eval: ep 0 (untrained base)';
     shortEpochLabel = 'Epoch 0';
   } else if (evalKind === 'progress') {
-    epochsLabel = epoch ? `Epoch ${epoch} (ongoing, step ${step || '?'})` : `Ongoing (step ${step || '?'})`;
-    shortEpochLabel = epoch ? `Epoch ${epoch}` : `step ${step || '?'}`;
+    evalBadgeLabel = evalEpoch
+      ? `Eval: ep ${evalEpoch} ckpt${evalStep ? ` (step ${evalStep})` : ''}`
+      : `Eval: ckpt step ${evalStep || '?'}`;
+    shortEpochLabel = evalEpoch ? `Eval ep ${evalEpoch}` : `step ${evalStep || '?'}`;
   } else if (evalKind === 'final') {
-    if (epoch) {
-      epochsLabel = `${epoch} epochs (step ${step || '?'})`;
-      shortEpochLabel = `${epoch} epochs`;
+    if (evalEpoch) {
+      evalBadgeLabel = `Eval: ep ${evalEpoch} final${evalStep ? ` (step ${evalStep})` : ''}`;
+      shortEpochLabel = `Eval ep ${evalEpoch} (final)`;
     } else if (trial.includes('stage2')) {
-      epochsLabel = `Stage 2 (${step || '2000'} steps)`;
+      evalBadgeLabel = `Eval: stage 2 (${evalStep || '2000'} steps)`;
       shortEpochLabel = 'Stage 2';
     } else {
-      epochsLabel = `Finished (step ${step || '?'})`;
-      shortEpochLabel = step ? `step ${step}` : 'Latest';
+      evalBadgeLabel = `Eval: final${evalStep ? ` (step ${evalStep})` : ''}`;
+      shortEpochLabel = evalStep ? `step ${evalStep}` : 'Final';
     }
-  } else if (epoch) {
-    epochsLabel = `${epoch} epochs`;
-    shortEpochLabel = `${epoch} epochs`;
+  } else if (evalEpoch) {
+    evalBadgeLabel = `Eval: ep ${evalEpoch}`;
+    shortEpochLabel = `Eval ep ${evalEpoch}`;
+  }
+
+  const trainStatus: 'live' | 'done' | 'stopped' | 'base' | null =
+    trainStatusRaw || (evalKind === 'base' ? 'base' : evalKind === 'progress' ? 'live' : evalKind === 'final' ? 'done' : null);
+
+  let trainBadgeLabel: string | null = null;
+  if (trainStatus && trainStatus !== 'base') {
+    const statusWord = trainStatus === 'live' ? 'live' : trainStatus === 'stopped' ? 'stopped' : 'done';
+    if (trainEpoch && trainTotalEpochs) {
+      trainBadgeLabel = `Train: ep ${trainEpoch}/${trainTotalEpochs} (${statusWord})`;
+    } else if (trainEpoch) {
+      trainBadgeLabel = `Train: ep ${trainEpoch} (${statusWord})`;
+    } else if (evalEpoch && trainStatus === 'done') {
+      trainBadgeLabel = `Train: ep ${evalEpoch}/${evalEpoch} (done)`;
+    } else {
+      trainBadgeLabel = `Train: ${statusWord}`;
+    }
+  }
+
+  const trainRunHref =
+    trialExpId && trialRunId && trialRunId !== 'base-only'
+      ? `#/experiments/${trialExpId}/runs/${trialRunId}`
+      : null;
+  const trainExpHref = trialExpId ? `#/experiments/${trialExpId}` : null;
+  const trainExpLabel = trialExpId
+    ? trialExpName
+      ? `${trialExpName.replace(/^spellsource-(?:v2-)?/, '')} (Exp ${trialExpId})`
+      : `Exp ${trialExpId}`
+    : null;
+
+  let conditioningLabel: string | null = null;
+  if (trial.includes('photoreal-rgba') || trial.includes('photo-rgba')) {
+    conditioningLabel = 'Edit: Photoreal RGBA';
+  } else if (trial.includes('photoreal') || trial.includes('edit-photo')) {
+    conditioningLabel = 'Edit: Photoreal';
+  } else if (trial.includes('bbox_rgba') || trial.includes('bbox-rgba')) {
+    conditioningLabel = 'Edit: BBox RGBA';
+  } else if (trial.includes('fuschia')) {
+    conditioningLabel = 'Edit: Fuschia Sil';
+  } else if (trial.includes('silhouette_wb') || trial.includes('sil-wb')) {
+    conditioningLabel = 'Edit: WB Sil';
+  } else if (trial.includes('silhouette_rgba') || trial.includes('sil-rgba')) {
+    conditioningLabel = 'Edit: RGBA Sil';
+  } else if (trial.includes('pixanimo')) {
+    conditioningLabel = 'Edit: Pixanimo Ref';
+  } else if (evalKind !== 'base') {
+    conditioningLabel = 'T2I';
   }
 
   const kindLabel =
     kindTag === 'full' ? 'Full fine-tune' : kindTag === 'lora' ? 'LoRA' : kindTag === 'base' ? 'Untrained base' : null;
 
+  const epochsLabel = [evalBadgeLabel, trainBadgeLabel].filter(Boolean).join(' • ');
+
   return {
     modelTitle: trial,
     epochsLabel,
     shortEpochLabel: shortEpochLabel || 'Latest',
+    evalBadgeLabel,
+    trainBadgeLabel,
+    trainStatus,
+    trainRunHref,
+    trainExpHref,
+    trainExpLabel,
+    conditioningLabel,
+    defaultVisible: tags['default_visible']?.value !== 'false',
     evalKind,
     scaleLabel,
     resolutionLabel,
     kindLabel,
-    stepLabel: step ? `step ${step}` : null,
+    stepLabel: evalStep ? `step ${evalStep}` : null,
   };
 };
 
@@ -320,19 +400,29 @@ export const ImageGridRunHeader = ({
   params,
   tags,
   maxParamsWidth,
+  runUuid,
+  currentStep,
+  availableImageSteps,
+  onSelectPreviewStep,
 }: {
   displayName: string;
   color?: string;
   params: Record<string, { key: string; value: string | number }>;
   tags?: Record<string, KeyValueEntity>;
   maxParamsWidth?: number;
+  runUuid?: string;
+  currentStep?: number;
+  availableImageSteps?: number[];
+  onSelectPreviewStep?: (step: number) => void;
 }) => {
   const { theme } = useDesignSystemTheme();
   const paramsText = formatRunParams(params);
   const meta = parseRunMetadata(displayName, tags);
 
-  const badgeStyle = (bg: string, fg: string) => ({
-    display: 'inline-block',
+  const badgeStyle = (bg: string, fg: string, border?: string) => ({
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 3,
     padding: '1px 6px',
     borderRadius: 4,
     fontSize: 11,
@@ -340,12 +430,21 @@ export const ImageGridRunHeader = ({
     lineHeight: 1.4,
     backgroundColor: bg,
     color: fg,
+    border: border ? `1px solid ${border}` : undefined,
     whiteSpace: 'nowrap' as const,
+    textDecoration: 'none',
   });
+
+  const trainColors =
+    meta?.trainStatus === 'live'
+      ? { bg: '#dbeafe', fg: '#1e40af', border: '#93c5fd' }
+      : meta?.trainStatus === 'stopped'
+        ? { bg: '#fef3c7', fg: '#92400e', border: '#fcd34d' }
+        : { bg: '#dcfce7', fg: '#166534', border: '#86efac' };
 
   const tooltipLines = [
     meta ? `${meta.modelTitle} — ${meta.epochsLabel}` : displayName,
-    meta && [meta.scaleLabel, meta.resolutionLabel, meta.kindLabel].filter(Boolean).join(' • '),
+    meta && [meta.conditioningLabel, meta.scaleLabel, meta.resolutionLabel, meta.kindLabel].filter(Boolean).join(' • '),
     paramsText,
   ].filter(Boolean);
 
@@ -354,7 +453,7 @@ export const ImageGridRunHeader = ({
       content={tooltipLines.join('\n')}
       componentId="mlflow.charts.image-plot.run-name-tooltip"
     >
-      <div css={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 3, paddingBottom: 2 }}>
+      <div css={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 4, paddingBottom: 2 }}>
         <div
           css={{
             whiteSpace: 'nowrap',
@@ -378,16 +477,77 @@ export const ImageGridRunHeader = ({
               maxWidth: maxParamsWidth,
             }}
           >
-            {meta.epochsLabel && (
+            {meta.evalBadgeLabel && (
               <span
+                title="Checkpoint epoch and step that this evaluation was sampled from"
                 css={badgeStyle(
-                  meta.epochsLabel.startsWith('Epoch 0')
-                    ? theme.colors.backgroundSecondary
-                    : theme.colors.actionDefaultBackgroundPress,
-                  theme.colors.textPrimary,
+                  meta.evalKind === 'base' ? theme.colors.backgroundSecondary : '#ede9fe',
+                  meta.evalKind === 'base' ? theme.colors.textSecondary : '#4c1d95',
+                  meta.evalKind === 'base' ? undefined : '#c4b5fd',
                 )}
               >
-                {meta.epochsLabel}
+                {meta.evalBadgeLabel}
+              </span>
+            )}
+            {meta.trainBadgeLabel &&
+              (meta.trainRunHref ? (
+                <a
+                  href={meta.trainRunHref}
+                  onClick={(e) => e.stopPropagation()}
+                  title="Current training checkpoint progress — click to open the MLflow training run"
+                  css={{
+                    ...badgeStyle(trainColors.bg, trainColors.fg, trainColors.border),
+                    '&:hover': { filter: 'brightness(0.95)', textDecoration: 'underline' },
+                  }}
+                >
+                  {meta.trainBadgeLabel} ↗
+                </a>
+              ) : (
+                <span
+                  title="Current training checkpoint progress"
+                  css={badgeStyle(trainColors.bg, trainColors.fg, trainColors.border)}
+                >
+                  {meta.trainBadgeLabel}
+                </span>
+              ))}
+            {meta.trainExpHref && meta.trainExpLabel && (
+              <a
+                href={meta.trainExpHref}
+                onClick={(e) => e.stopPropagation()}
+                title="Open family training experiment in MLflow"
+                css={{
+                  ...badgeStyle(theme.colors.backgroundSecondary, theme.colors.actionPrimaryBackgroundDefault, theme.colors.borderDecorative),
+                  '&:hover': { textDecoration: 'underline' },
+                }}
+              >
+                {meta.trainExpLabel} ↗
+              </a>
+            )}
+            {meta.evalKind !== 'base' && (
+              <StageJudgementBadgeControl
+                trial={meta.modelTitle}
+                runUuid={runUuid}
+                tags={tags}
+                currentStep={currentStep}
+                currentCheckpoint={tags?.['checkpoint']?.value}
+                availableImageSteps={availableImageSteps}
+                onSelectPreviewStep={onSelectPreviewStep}
+              />
+            )}
+          </div>
+        )}
+        {meta && (
+          <div
+            css={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 4,
+              maxWidth: maxParamsWidth,
+            }}
+          >
+            {meta.conditioningLabel && (
+              <span css={badgeStyle(theme.colors.backgroundSecondary, theme.colors.textPrimary)}>
+                {meta.conditioningLabel}
               </span>
             )}
             {meta.scaleLabel && (

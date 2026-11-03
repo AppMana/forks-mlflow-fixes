@@ -10,6 +10,8 @@ import invariant from 'invariant';
 import { RunColorPill } from '../../RunColorPill';
 import { useGetExperimentRunColor, useSaveExperimentRunColor } from '../../../hooks/useExperimentRunColor';
 import { useExperimentViewRunsTableHeaderContext } from '../ExperimentViewRunsTableHeaderContext';
+import { parseRunMetadata } from '../../../../runs-charts/components/charts/ImageGridPlot.common';
+import { StageJudgementBadgeControl } from '../../../../runs-charts/components/charts/StageJudgementModal';
 
 export interface RunNameCellRendererProps extends ICellRendererParams {
   data: RunRowType;
@@ -30,7 +32,8 @@ export const RunNameCellRenderer = React.memo((props: RunNameCellRendererProps) 
     return <GroupParentCellRenderer {...props} />;
   }
   const { onExpand, data } = props;
-  const { runName, experimentId, runUuid, runDateAndNestInfo, hidden } = data;
+  const { runName, experimentId, runUuid, runDateAndNestInfo, hidden, tags } = data;
+  const meta = parseRunMetadata(runName || '', tags);
 
   // If we are not rendering a group, assert existence of necessary fields
   invariant(experimentId, 'experimentId should be set for run rows');
@@ -41,6 +44,13 @@ export const RunNameCellRenderer = React.memo((props: RunNameCellRendererProps) 
 
   const renderingAsParent = !isNaN(level) && hasExpander;
   const hideRunColorControl = belongsToGroup && useGroupedValuesInCharts;
+
+  const trainBadgeColors =
+    meta?.trainStatus === 'live'
+      ? { bg: '#dbeafe', fg: '#1e40af' }
+      : meta?.trainStatus === 'stopped'
+        ? { bg: '#fef3c7', fg: '#92400e' }
+        : { bg: '#dcfce7', fg: '#166534' };
 
   return (
     <div css={styles.cellWrapper}>
@@ -83,9 +93,73 @@ export const RunNameCellRenderer = React.memo((props: RunNameCellRendererProps) 
           to={Routes.getRunPageRoute(experimentId, runUuid)}
           css={styles.runLink}
           tabIndex={0}
+          title={meta ? `${meta.modelTitle} — ${meta.epochsLabel}` : runName}
         >
-          <span css={styles.runName}>{runName}</span>
+          <span css={styles.runName}>{meta ? meta.modelTitle : runName}</span>
         </Link>
+        {meta && (
+          <div css={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+            <span
+              title={meta.evalBadgeLabel}
+              css={{
+                padding: '0px 5px',
+                borderRadius: 3,
+                fontSize: 10,
+                fontWeight: 600,
+                lineHeight: '16px',
+                backgroundColor: meta.evalKind === 'base' ? theme.colors.backgroundSecondary : '#ede9fe',
+                color: meta.evalKind === 'base' ? theme.colors.textSecondary : '#4c1d95',
+              }}
+            >
+              {meta.shortEpochLabel}
+            </span>
+            {meta.trainBadgeLabel &&
+              (meta.trainRunHref ? (
+                <a
+                  href={meta.trainRunHref}
+                  onClick={(e) => e.stopPropagation()}
+                  title={`${meta.trainBadgeLabel} — click to open training run`}
+                  css={{
+                    padding: '0px 5px',
+                    borderRadius: 3,
+                    fontSize: 10,
+                    fontWeight: 600,
+                    lineHeight: '16px',
+                    backgroundColor: trainBadgeColors.bg,
+                    color: trainBadgeColors.fg,
+                    textDecoration: 'none',
+                    '&:hover': { textDecoration: 'underline' },
+                  }}
+                >
+                  {meta.trainBadgeLabel.replace(/^Train:\s*/, 'train ')} ↗
+                </a>
+              ) : (
+                <span
+                  title={meta.trainBadgeLabel}
+                  css={{
+                    padding: '0px 5px',
+                    borderRadius: 3,
+                    fontSize: 10,
+                    fontWeight: 600,
+                    lineHeight: '16px',
+                    backgroundColor: trainBadgeColors.bg,
+                    color: trainBadgeColors.fg,
+                  }}
+                >
+                  {meta.trainBadgeLabel.replace(/^Train:\s*/, 'train ')}
+                </span>
+              ))}
+            {meta.evalKind !== 'base' && (
+              <StageJudgementBadgeControl
+                trial={meta.modelTitle}
+                runUuid={runUuid}
+                tags={tags}
+                currentCheckpoint={tags?.['checkpoint']?.value}
+                compact
+              />
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

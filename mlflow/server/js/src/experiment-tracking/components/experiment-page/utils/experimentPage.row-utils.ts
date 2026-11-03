@@ -495,22 +495,28 @@ const determineVisibleRuns = (
     // If a row is a run group, we use its rowUuid for setting visibility.
     // If this is a run, use runUuid.
     const runUuidToToggle = runRow.groupParentInfo ? runRow.rowUuid : runRow.runUuid;
+    const isDefaultHidden =
+      runRow.tags?.['default_visible']?.value === 'false' &&
+      runsVisibilityMap[runUuidToToggle] === undefined &&
+      !runsHidden.includes(runUuidToToggle);
 
     const rowWithHiddenFlag = {
       ...runRow,
-      hidden: determineIfRowIsHidden(
-        runsHiddenMode,
-        runsHidden,
-        runUuidToToggle,
-        visibleRowCounter,
-        runsVisibilityMap,
-        runRow.runStatus,
-      ),
+      hidden:
+        isDefaultHidden ||
+        determineIfRowIsHidden(
+          runsHiddenMode,
+          runsHidden,
+          runUuidToToggle,
+          visibleRowCounter,
+          runsVisibilityMap,
+          runRow.runStatus,
+        ),
     };
 
     const isGroupContainingRuns = runRow.groupParentInfo && !runRow.groupParentInfo.isRemainingRunsGroup;
     const isUngroupedRun = !runRow.runDateAndNestInfo?.belongsToGroup;
-    if (isGroupContainingRuns || isUngroupedRun) {
+    if (!isDefaultHidden && (isGroupContainingRuns || isUngroupedRun)) {
       visibleRowCounter++;
     }
 

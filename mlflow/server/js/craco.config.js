@@ -152,17 +152,7 @@ function enableOptionalTypescript(config) {
    * We're going to exclude typechecking test files from webpack's pipeline
    */
 
-  const ForkTsCheckerPlugin = config.plugins.find((plugin) => plugin.constructor.name === 'ForkTsCheckerWebpackPlugin');
-
-  if (ForkTsCheckerPlugin) {
-    ForkTsCheckerPlugin.options.typescript.configOverwrite.exclude = [
-      '**/*.test.ts',
-      '**/*.test.tsx',
-      '**/*.stories.tsx',
-    ].map((pattern) => path.join(__dirname, 'src', pattern));
-  } else {
-    throw new Error('Failed to setup Typescript');
-  }
+  config.plugins = config.plugins.filter((plugin) => plugin.constructor.name !== 'ForkTsCheckerWebpackPlugin');
 
   return config;
 }

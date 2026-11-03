@@ -17,6 +17,7 @@ import { ExperimentPageTabName } from '@mlflow/mlflow/src/experiment-tracking/co
 import { useExperimentKind, isGenAIExperimentKind } from '../../utils/ExperimentKindUtils';
 import { useCallback, useMemo, type ReactNode } from 'react';
 import { shouldEnableImprovedEvalRunsComparison } from '../../../common/utils/FeatureUtils';
+import { StageJudgementBadgeControl } from '../runs-charts/components/charts/StageJudgementModal';
 const RunViewHeaderIcon = () => {
   const { theme } = useDesignSystemTheme();
   return (
@@ -188,9 +189,17 @@ export const RunViewHeader = ({
     <div css={{ flexShrink: 0 }}>
       <PageHeader
         title={
-          <span css={{ display: 'inline-flex', alignItems: 'center', gap: theme.spacing.sm }}>
+          <span css={{ display: 'inline-flex', alignItems: 'center', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
             <RunViewHeaderIcon />
             <span data-testid="runs-header">{runDisplayName}</span>
+            {runTags?.['trial']?.value && runTags?.['eval_kind']?.value !== 'base' && (
+              <StageJudgementBadgeControl
+                trial={runTags['trial'].value}
+                runUuid={runUuid}
+                tags={runTags}
+                currentCheckpoint={runTags?.['checkpoint']?.value || runTags?.['latest_checkpoint']?.value}
+              />
+            )}
           </span>
         }
         breadcrumbs={breadcrumbs}

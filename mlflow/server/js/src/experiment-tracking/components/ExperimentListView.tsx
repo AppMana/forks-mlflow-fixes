@@ -32,6 +32,17 @@ import { shouldEnableWorkspaces } from '../../common/utils/FeatureUtils';
 import { extractWorkspaceFromSearchParams } from '../../workspaces/utils/WorkspaceUtils';
 import { useSearchParams } from '../../common/utils/RoutingUtils';
 
+const HIDDEN_BY_DEFAULT_EXPERIMENTS = new Set([
+  'Default',
+  'test-resnet-experiment',
+  'MLflow Quickstart',
+  'spellsource-gsvb-training',
+  'spellsource-curriculum-test',
+  'spellsource-ui-probe',
+  'spellsource-caption-ab',
+  'spellsource-qwen21-assistant-validation',
+]);
+
 export const ExperimentListView = () => {
   const [searchParams] = useSearchParams();
   const workspacesEnabled = shouldEnableWorkspaces();
@@ -39,9 +50,10 @@ export const ExperimentListView = () => {
 
   const [searchFilter, setSearchFilter] = useSearchFilter();
   const { tagsFilter, setTagsFilter, isTagsFilterOpen, setIsTagsFilterOpen } = useTagsFilter();
+  const [showAllExperiments, setShowAllExperiments] = useState(false);
 
   const {
-    data: experiments,
+    data: rawExperiments,
     isLoading,
     error,
     hasNextPage,
@@ -53,6 +65,17 @@ export const ExperimentListView = () => {
     setSorting,
   } = useExperimentListQuery({ searchFilter, tagsFilter });
   const invalidateExperimentList = useInvalidateExperimentList();
+
+  const experiments = React.useMemo(() => {
+    if (!rawExperiments) return undefined;
+    if (showAllExperiments || Boolean(searchFilter) || tagsFilter.length > 0) {
+      return rawExperiments;
+    }
+    const filtered = rawExperiments.filter(
+      (e) => e.name.startsWith('spellsource-') && !HIDDEN_BY_DEFAULT_EXPERIMENTS.has(e.name),
+    );
+    return filtered.length > 0 ? filtered : rawExperiments;
+  }, [rawExperiments, showAllExperiments, searchFilter, tagsFilter]);
 
   const { EditTagsModal, showEditExperimentTagsModal } = useUpdateExperimentTags({
     onSuccess: invalidateExperimentList,
@@ -216,6 +239,34 @@ export const ExperimentListView = () => {
               <ExperimentListViewTagsFilter tagsFilter={tagsFilter} setTagsFilter={setTagsFilter} />
             </Popover.Content>
           </Popover.Root>
+          <Button
+            componentId="mlflow.experiment_list_view.visibility_toggle"
+            type={!showAllExperiments ? 'primary' : undefined}
+            onClick={() => setShowAllExperiments((v) => !v)}
+          >
+            {showAllExperiments
+              ? `All Experiments (${rawExperiments?.length ?? 0})`
+              : `Live & Interesting (${experiments?.length ?? 0} of ${rawExperiments?.length ?? 0})`}
+          </Button>
+          <a
+            href="#/experiments/115?viewStateShareKey=final-eval-gallery&compareRunsMode=CHART"
+            css={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+              padding: '5px 12px',
+              borderRadius: 6,
+              fontSize: 12,
+              fontWeight: 700,
+              backgroundColor: theme.colors.actionPrimaryBackgroundDefault,
+              color: '#ffffff',
+              textDecoration: 'none',
+              whiteSpace: 'nowrap',
+              '&:hover': { filter: 'brightness(1.06)' },
+            }}
+          >
+            Open Master Model Comparison Gallery (Exp 115) ↗
+          </a>
         </TableFilterLayout>
         <ExperimentListTable
           experiments={experiments}

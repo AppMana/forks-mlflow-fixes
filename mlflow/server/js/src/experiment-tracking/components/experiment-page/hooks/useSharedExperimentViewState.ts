@@ -47,7 +47,18 @@ export const useSharedExperimentViewState = (
   const [searchParams] = useSearchParams();
   const intl = useIntl();
   const dispatch = useDispatch<ThunkDispatch>();
-  const viewStateShareKey = searchParams.get(EXPERIMENT_PAGE_VIEW_STATE_SHARE_URL_PARAM_KEY);
+  const hasExplicitQueryParams =
+    searchParams.has(EXPERIMENT_PAGE_VIEW_STATE_SHARE_URL_PARAM_KEY) ||
+    searchParams.has(EXPERIMENT_PAGE_VIEW_MODE_QUERY_PARAM_KEY) ||
+    EXPERIMENT_PAGE_QUERY_PARAM_KEYS.some((key) => searchParams.has(key));
+  const hasGalleryViewTag = Boolean(
+    experiment?.tags?.some((t) => t.key === `${EXPERIMENT_PAGE_VIEW_STATE_SHARE_TAG_PREFIX}final-eval-gallery`),
+  );
+  const viewStateShareKey =
+    searchParams.get(EXPERIMENT_PAGE_VIEW_STATE_SHARE_URL_PARAM_KEY) ||
+    (!hasExplicitQueryParams && (experiment?.experimentId === '115' || hasGalleryViewTag)
+      ? 'final-eval-gallery'
+      : null);
 
   const isViewStateShared = Boolean(viewStateShareKey);
 
